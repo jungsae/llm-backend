@@ -1,0 +1,32 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id           Int       @id @default(autoincrement())
+  userId       String // Supabase 사용자 ID
+  status       String // QUEUED, PROCESSING, COMPLETED, FAILED
+  priority     Int // 우선순위 (높을수록 우선)
+  inputData    Json // LLM 요청 데이터
+  resultData   Json? // LLM 처리 결과
+  errorMessage String? // 에러 발생 시 메시지
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+}

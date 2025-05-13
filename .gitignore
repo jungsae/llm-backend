@@ -1,0 +1,11 @@
+.env
+node_modules
+dist
+.vscode/
+package.json
+package-lock.json
+
+#cursor
+.cursorrules
+.cursorignore
+*.cursor
