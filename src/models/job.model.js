@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../infrastructure/database.js';
 
 export class Job {
     static async create(data) {

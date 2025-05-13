@@ -1,87 +1,11 @@
-// import amqp from 'amqplib';
-// import config from '../config/index.js';
-
-// let connection = null;
-// let channel = null;
-
-// export const connect = async () => {
-//     try {
-//         connection = await amqp.connect(config.rabbitmq.url);
-//         channel = await connection.createChannel();
-
-//         // 큐 선언
-//         await channel.assertQueue(
-//             config.rabbitmq.queues.job.name,
-//             config.rabbitmq.queues.job.options
-//         );
-//         console.log('RabbitMQ 연결 성공');
-
-//         return { connection, channel };
-//     } catch (error) {
-//         console.error('RabbitMQ 연결 실패:', error);
-//         throw error;
-//     }
-// };
-
-// export const close = async () => {
-//     try {
-//         if (channel) await channel.close();
-//         if (connection) await connection.close();
-//         console.log('RabbitMQ 연결 종료');
-//     } catch (error) {
-//         console.error('RabbitMQ 연결 종료 실패:', error);
-//         throw error;
-//     }
-// };
-
-// export const publishJob = async (job) => {
-//     try {
-//         if (!channel) {
-//             throw new Error('RabbitMQ 채널이 초기화되지 않았습니다.');
-//         }
-
-//         const message = Buffer.from(JSON.stringify(job));
-//         return channel.sendToQueue(config.rabbitmq.queues.job.name, message, {
-//             persistent: true
-//         });
-//     } catch (error) {
-//         console.error('작업 발행 실패:', error);
-//         throw error;
-//     }
-// };
-
-// export const consumeJobs = async (callback) => {
-//     try {
-//         if (!channel) {
-//             throw new Error('RabbitMQ 채널이 초기화되지 않았습니다.');
-//         }
-
-//         await channel.consume(config.rabbitmq.queues.job.name, async (msg) => {
-//             if (msg !== null) {
-//                 try {
-//                     const job = JSON.parse(msg.content.toString());
-//                     await callback(job);
-//                     channel.ack(msg);
-//                 } catch (error) {
-//                     console.error('작업 처리 실패:', error);
-//                     // 실패한 작업은 큐에 다시 넣기
-//                     channel.nack(msg, false, true);
-//                 }
-//             }
-//         });
-//     } catch (error) {
-//         console.error('작업 소비 설정 실패:', error);
-//         throw error;
-//     }
-// }; 
-
 import amqp from 'amqplib';
-import config from '../config/index.js'; // 설정 파일 경로 확인 (src/config/index.js 등)
+import config from '../config/index.js';
 
 let connection = null;
 let channel = null;
 
-export const connectRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
+// RabbitMQ 서버에 연결하고 채널을 생성하는 함수
+export const connectRabbitMQ = async () => { // LLM 규칙: camelCase
     try {
         // LLM 규칙: 작은따옴표, 세미콜론
         console.log('RabbitMQ 서버에 연결 시도;', config.rabbitmq.url);
@@ -89,7 +13,7 @@ export const connectRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
         connection = await amqp.connect(config.rabbitmq.url);
         channel = await connection.createChannel();
 
-        // 큐 선언 (우선 순위 설정은 config 파일에서 관리)
+        // 큐 선언
         // config.rabbitmq.queues.job.options 객체에 {'x-max-priority': maxPriority}가 포함되어야 함.
         await channel.assertQueue(
             config.rabbitmq.queues.job.name,
@@ -122,6 +46,7 @@ export const connectRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
     }
 };
 
+// RabbitMQ 연결 및 채널을 닫는 함수
 export const closeRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
     try {
         // LLM 규칙: 작은따옴표, 세미코론
@@ -144,9 +69,9 @@ export const closeRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
     }
 };
 
-// job 객체에 우선 순위 정보 포함 또는 priorityLevel 인자 추가 필요
-// 예시: job 객체 안에 { ..., priorityLevel: 5 } 형태로 정보가 있다고 가정
-export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체에 priorityLevel 있다고 가정
+// 작업 메시지를 RabbitMQ 큐에 발행하는 함수
+// job 객체에 우선 순위 정보 (priority 속성) 포함 필요
+export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체에 priority 있다고 가정
     try {
         if (!channel) {
             // LLM 규칙: 작은따옴표, 세미코론
@@ -157,15 +82,15 @@ export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체�
         const queueName = config.rabbitmq.queues.job.name; // LLM 규칙: camelCase, 세미코론
 
         // 메시지 발행 (priority 속성 추가)
-        // job 객체에 priorityLevel 속성이 있다고 가정
-        const priorityLevel = job.priorityLevel; // LLM 규칙: camelCase, 세미코론
+        // job 객체에 priority 속성이 있다고 가정
+        const priorityLevel = job.priority; // LLM 규칙: camelCase, 세미코론
 
         // LLM 규칙: 작은따옴표, 세미코론
         console.log(`작업 발행 시도: ${queueName}, priority: ${priorityLevel};`);
 
         // sendToQueue 메서드의 options 객체에 priority 속성 추가
         const publishResult = channel.sendToQueue(queueName, message, {
-            persistent: true,
+            persistent: true, // 메시지 영속성 설정
             priority: priorityLevel // <-- 우선 순위 값 설정
         });
 
@@ -188,7 +113,8 @@ export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체�
     }
 };
 
-// 이 함수는 워커 프로세스에서 사용될 것입니다.
+// RabbitMQ 큐에서 작업을 소비하는 함수 (워커 프로세스에서 사용)
+// callback 함수는 메시지를 받아 실제 작업 처리 로직을 수행합니다.
 export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async 사용
     try {
         if (!channel) {
@@ -202,9 +128,9 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
         console.log(`작업 소비 시작 대기: ${queueName};`);
 
         // 소비 시작. 메시지 올 때마다 콜백 실행
+        // consume 메서드의 옵션에 prefetch 속성 추가 (한 번에 1개 메시지만 처리)
         await channel.consume(queueName, async (msg) => { // LLM 규칙: async 사용
-            // LLM 규칙: 작은따옴표
-            console.log('메시지 수신;');
+            console.log('메시지 수신;'); // LLM 규칙: 작은따옴표
             if (msg !== null) {
                 // LLM 규칙: 작은따옴표, 세미코론
                 console.log('메시지 내용:', msg.content.toString());
@@ -213,11 +139,16 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
                     // const priority = msg.properties.priority; // 메시지 속성에서 우선 순위 값 확인 가능 (필요 시)
                     // LLM 규칙: 작은따옴표, 세미코론
                     console.log('작업 내용 파싱 성공, 처리 시작;', job);
+
+                    // --------- 핵심 작업 처리 시작 ---------
+                    // 전달받은 콜백 함수 실행 (실제 비즈니스 로직 처리)
                     // LLM 규칙: async/await 사용
-                    await callback(job); // 전달받은 콜백 함수 실행 (실제 비즈니스 로직 처리)
+                    await callback(job);
+                    // --------- 핵심 작업 처리 완료 ---------
+
                     // LLM 규칙: 작은따옴표, 세미코론
                     console.log('작업 처리 성공, 메시지 ack;', msg.fields.deliveryTag);
-                    channel.ack(msg); // 성공적으로 처리했음을 알림 (RabbitMQ에서 메시지 삭제)
+                    channel.ack(msg); // 성공 처리 후 RabbitMQ에게 알림
                 } catch (error) { // LLM 규칙: 변수명 camelCase
                     // 작업 처리 중 오류 발생 시
                     // LLM 규칙: 작은따옴표, 세미코론
@@ -239,18 +170,16 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
                 // TODO: [2025-MM-DD] 소비자 취소 신호 처리 (LLM 규칙: TODO 형식)
             }
         }, {
-            noAck: false // 자동 확인 응답 비활성화 (수동 ack/nack 사용)
+            noAck: false, // 수동 확인 응답 활성화
+            // --- prefetch 설정 ---
+            prefetch: 1 // <-- 한 번에 1개의 unacked 메시지만 받음
+            // 또는 qos: 1 로 설정할 수도 있습니다 (동일한 의미)
         });
 
-        // 이 함수 자체는 소비 설정을 완료하고 바로 반환하므로,
-        // 소비가 시작되었음을 알리는 로그를 남깁니다.
-        // LLM 규칙: 작은따옴표, 세미코론
-        console.log('작업 소비 설정 완료;');
+        console.log(`작업 소비 설정 완료. 큐 '${queueName}' 에서 메시지 대기 중 (prefetch=1);`); // 로그 수정 (LLM 규칙)
 
     } catch (error) { // LLM 규칙: 변수명 camelCase
-        // LLM 규칙: 작은따옴표, 세미코론
-        console.error('작업 소비 설정 실패:', error);
-        // LLM 규칙: 에러 전파
-        throw error;
+        console.error('작업 소비 설정 실패:', error); // LLM 규칙: 작은따옴표, 세미코론
+        throw error; // LLM 규칙: 에러 전파
     }
 };

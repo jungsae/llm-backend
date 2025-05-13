@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import routes from './routes/index.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import config from './config/index.js';
-import { connectRabbitMQ, closeRabbitMQ, consumeJobs } from './utils/rabbitmq.js';
+import { connectRabbitMQ, closeRabbitMQ, consumeJobs } from './infrastructure/rabbitmq.js';
 import { processJob } from './services/job.processor.js';
 import fastifyFormbody from '@fastify/formbody';
 

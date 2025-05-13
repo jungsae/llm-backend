@@ -1,6 +1,6 @@
 import { Job } from '../models/job.model.js';
 import { ValidationError, NotFoundError, BusinessError } from '../errors/custom.error.js';
-import { publishJob } from '../utils/rabbitmq.js';
+import { publishJob } from '../infrastructure/rabbitmq.js';
 
 export const jobService = {
     createJob: async (userId, inputData, priority = 0) => {

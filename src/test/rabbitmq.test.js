@@ -1,5 +1,5 @@
 //실행법 : node src/test/rabbitmq.test.js
-import { connect, publishJob, consumeJobs, close } from '../utils/rabbitmq.js';
+import { connectRabbitMQ, publishJob, consumeJobs, closeRabbitMQ } from '../infrastructure/rabbitmq.js';
 
 const testJob = {
     id: 1,
@@ -19,7 +19,7 @@ const runTest = async () => {
     try {
         // RabbitMQ 연결
         console.log('RabbitMQ 연결 시도...');
-        await connect();
+        await connectRabbitMQ();
 
         // 작업 발행
         console.log('작업 발행 시도...');
@@ -33,13 +33,13 @@ const runTest = async () => {
         // 5초 후 종료
         setTimeout(async () => {
             console.log('테스트 종료');
-            await close();
+            await closeRabbitMQ();
             process.exit(0);
         }, 5000);
 
     } catch (error) {
         console.error('테스트 실패:', error);
-        await close();
+        await closeRabbitMQ();
         process.exit(1);
     }
 };
