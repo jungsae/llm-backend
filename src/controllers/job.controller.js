@@ -1,8 +1,9 @@
 import { jobService } from '../services/job.service.js';
-import { NotFoundError } from '../errors/custom.error.js';
+import { NotFoundError } from '../errors/custom.errors.js';
 
 export const createJob = async (request, reply) => {
     const { userId, inputData, priority } = request.body;
+    console.log('createJob', userId, inputData, priority);
     const job = await jobService.createJob(userId, inputData, priority);
     return reply.code(201).send(job);
 };

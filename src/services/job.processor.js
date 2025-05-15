@@ -1,29 +1,119 @@
+import axios from 'axios';
+import { PrismaClient } from '@prisma/client';
 import { jobService } from './job.service.js';
+import { JobError } from '../errors/custom.errors.js';
+import { BusinessError } from '../errors/custom.errors.js';
+import { ERROR_CODES } from '../errors/error.codes.js';
+import logger from '../utils/logger.js';
 
-export const processJob = async (job) => {
+const prisma = new PrismaClient();
+const LLM_API_URL = 'https://blisle.duckdns.org/app1/v1/chat/completions';
+const TIMEOUT = 540000; // 9분
+
+// 작업 처리 타임아웃 설정 (5분)
+const JOB_TIMEOUT = 5 * 60 * 1000;
+
+// 작업 재시도 설정
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1초
+
+// 타임아웃 처리를 위한 Promise 래퍼
+const withTimeout = async (promise, timeoutMs, jobId) => {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new JobError('작업 처리 시간 초과', undefined, {
+                timeout: timeoutMs,
+                jobId
+            }));
+        }, timeoutMs);
+    });
+
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+// 작업 처리 함수
+const processJobWithRetry = async (job, retryCount = 0) => {
     try {
         // 작업 상태를 PROCESSING으로 변경
         await jobService.updateJobStatus(job.id, 'PROCESSING');
 
-        // TODO: 실제 작업 처리 로직 구현
-        // 여기서는 간단한 시뮬레이션만 수행
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // 실제 작업 처리 로직
+        const processPromise = (async () => {
+            // LLM API 요청 데이터 준비
+            const llmPayload = {
+                messages: [{ role: 'user', content: job.inputData.prompt }],
+                mode: 'instruct',
+                max_tokens: job.inputData.max_tokens || 150
+            };
 
-        // 작업 완료 처리
-        const resultData = {
-            processedAt: new Date().toISOString(),
-            message: '작업이 성공적으로 처리되었습니다.'
-        };
+            logger.info(`작업 ${job.id} LLM API 요청 시작:`, {
+                prompt: job.inputData.prompt,
+                apiUrl: LLM_API_URL
+            });
 
-        await jobService.updateJobStatus(job.id, 'COMPLETED', resultData);
+            // LLM API 호출
+            const response = await axios.post(LLM_API_URL, llmPayload, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: TIMEOUT
+            });
+
+            // 응답 데이터 검증
+            if (!response.data) {
+                throw new BusinessError('LLM API 응답이 유효하지 않습니다', ERROR_CODES.JOB_PROCESSING_FAILED);
+            }
+
+            await jobService.updateJobStatus(job.id, 'COMPLETED', response.data);
+            logger.info(`작업 ${job.id} 완료:`, { result: response.data });
+        })();
+
+        // 타임아웃 적용
+        await withTimeout(processPromise, JOB_TIMEOUT, job.id);
+
     } catch (error) {
-        // 작업 실패 처리
+        // 재시도 가능한 경우 재시도
+        if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return processJobWithRetry(job, retryCount + 1);
+        }
+
+        // 최대 재시도 횟수 초과 시 실패 처리
+        let errorMessage = 'LLM 처리 중 오류가 발생했습니다';
+        let errorCode = ERROR_CODES.JOB_PROCESSING_FAILED;
+
+        if (axios.isAxiosError(error)) {
+            if (error.code === 'ECONNREFUSED') {
+                errorMessage = 'LLM 서버에 연결할 수 없습니다';
+            } else if (error.code === 'ETIMEDOUT' || error.response?.status === 504) {
+                errorMessage = 'LLM 요청이 시간 초과되었습니다';
+                errorCode = ERROR_CODES.JOB_TIMEOUT;
+            } else if (error.response) {
+                errorMessage = `LLM API 오류: ${error.response.status}`;
+            }
+        }
+
         await jobService.updateJobStatus(
             job.id,
             'FAILED',
             null,
-            error.message || '작업 처리 중 오류가 발생했습니다.'
+            errorMessage
         );
-        throw error;
+
+        throw new JobError(errorMessage, undefined, {
+            originalError: error.message,
+            retryCount,
+            jobId: job.id
+        });
     }
+};
+
+// 메인 작업 처리 함수
+export const processJob = async (job) => {
+    await processJobWithRetry(job);
 }; 

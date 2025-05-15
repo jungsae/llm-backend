@@ -1,24 +1,9 @@
-import fastify from 'fastify';
 import jobRoutes from './job.routes.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
 
 export default async function routes(fastify) {
     // 헬스 체크 라우트
     fastify.get('/health', async (request, reply) => {
         return { status: 'ok' };
-    });
-
-    // DB 연결 체크 라우트
-    fastify.get('/health/db', async (request, reply) => {
-        try {
-            await prisma.$queryRaw`SELECT 1`;
-            return { status: 'ok', db: 'connected' };
-        } catch (e) {
-            reply.code(500);
-            return { status: 'fail', db: 'disconnected', error: e.message };
-        }
     });
 
     // job 라우트 등록

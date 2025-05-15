@@ -1,3 +1,4 @@
+import { ERROR_CODES } from './error.codes.js';
 import config from '../config/index.js';
 
 export class AppError extends Error {
@@ -15,7 +16,9 @@ export const handleError = (error, request, reply) => {
     if (error instanceof AppError) {
         return reply.status(error.statusCode).send({
             status: error.status,
-            message: error.message
+            message: error.message,
+            code: error.code || ERROR_CODES.INTERNAL_SERVER_ERROR,
+            details: error.details || {}
         });
     }
 
@@ -25,6 +28,7 @@ export const handleError = (error, request, reply) => {
     return reply.status(500).send({
         status: 'error',
         message: 'Internal Server Error',
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
         ...(isDevelopment && { stack: error.stack })
     });
 }; 

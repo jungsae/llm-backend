@@ -1,11 +1,12 @@
 import amqp from 'amqplib';
-import config from '../config/index.js';
+import config from '../../config/index.js';
+import { QueueError } from '../../errors/custom.errors.js';
 
 let connection = null;
 let channel = null;
 
 // RabbitMQ 서버에 연결하고 채널을 생성하는 함수
-export const connectRabbitMQ = async () => { // LLM 규칙: camelCase
+export const connectRabbitMQ = async () => {
     try {
         // LLM 규칙: 작은따옴표, 세미콜론
         console.log('RabbitMQ 서버에 연결 시도;', config.rabbitmq.url);
@@ -47,7 +48,7 @@ export const connectRabbitMQ = async () => { // LLM 규칙: camelCase
 };
 
 // RabbitMQ 연결 및 채널을 닫는 함수
-export const closeRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
+export const closeRabbitMQ = async () => {
     try {
         // LLM 규칙: 작은따옴표, 세미코론
         console.log('RabbitMQ 연결 종료 시도;');
@@ -71,11 +72,10 @@ export const closeRabbitMQ = async () => { // 함수명 camelCase (LLM 규칙)
 
 // 작업 메시지를 RabbitMQ 큐에 발행하는 함수
 // job 객체에 우선 순위 정보 (priority 속성) 포함 필요
-export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체에 priority 있다고 가정
+export const publishJob = async (job) => {
     try {
         if (!channel) {
-            // LLM 규칙: 작은따옴표, 세미코론
-            throw new Error('RabbitMQ 채널이 초기화되지 않았습니다;');
+            throw new QueueError('RabbitMQ 채널이 초기화되지 않았습니다');
         }
 
         const message = Buffer.from(JSON.stringify(job));
@@ -108,18 +108,19 @@ export const publishJob = async (job) => { // LLM 규칙: camelCase, job 객체�
     } catch (error) { // LLM 규칙: 변수명 camelCase
         // LLM 규칙: 작은따옴표, 세미코론
         console.error('작업 발행 실패:', error);
-        // LLM 규칙: 에러 전파
-        throw error;
+        throw new QueueError('작업 발행 중 오류가 발생했습니다', undefined, {
+            originalError: error.message
+        });
     }
 };
 
 // RabbitMQ 큐에서 작업을 소비하는 함수 (워커 프로세스에서 사용)
 // callback 함수는 메시지를 받아 실제 작업 처리 로직을 수행합니다.
-export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async 사용
+export const consumeJobs = async (callback) => {
     try {
         if (!channel) {
             // LLM 규칙: 작은따옴표, 세미코론
-            throw new Error('RabbitMQ 채널이 초기화되지 않았습니다;');
+            throw new QueueError('RabbitMQ 채널이 초기화되지 않았습니다;');
         }
 
         const queueName = config.rabbitmq.queues.job.name; // LLM 규칙: camelCase, 세미코론
@@ -129,7 +130,7 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
 
         // 소비 시작. 메시지 올 때마다 콜백 실행
         // consume 메서드의 옵션에 prefetch 속성 추가 (한 번에 1개 메시지만 처리)
-        await channel.consume(queueName, async (msg) => { // LLM 규칙: async 사용
+        await channel.consume(queueName, async (msg) => {
             console.log('메시지 수신;'); // LLM 규칙: 작은따옴표
             if (msg !== null) {
                 // LLM 규칙: 작은따옴표, 세미코론
@@ -142,7 +143,6 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
 
                     // --------- 핵심 작업 처리 시작 ---------
                     // 전달받은 콜백 함수 실행 (실제 비즈니스 로직 처리)
-                    // LLM 규칙: async/await 사용
                     await callback(job);
                     // --------- 핵심 작업 처리 완료 ---------
 
@@ -159,7 +159,6 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
                     // - msg: 처리 실패한 메시지
                     // - allUpTo: true면 이 메시지 이전의 모든 처리되지 않은 메시지도 nack (보통 false)
                     // - requeue: true면 큐의 끝에 다시 넣음, false면 버림 (DLX 등으로 라우팅)
-                    // LLM 규칙: async/await 사용
                     // 에러 처리 규칙: 실패한 작업은 큐에 다시 넣기 (requeue: true)
                     channel.nack(msg, false, true); // 큐에 다시 넣음
                 }
@@ -176,10 +175,10 @@ export const consumeJobs = async (callback) => { // LLM 규칙: camelCase, async
             // 또는 qos: 1 로 설정할 수도 있습니다 (동일한 의미)
         });
 
-        console.log(`작업 소비 설정 완료. 큐 '${queueName}' 에서 메시지 대기 중 (prefetch=1);`); // 로그 수정 (LLM 규칙)
+        console.log(`작업 소비 설정 완료. 큐 '${queueName}' 에서 메시지 대기 중 (prefetch=1);`);
 
-    } catch (error) { // LLM 규칙: 변수명 camelCase
-        console.error('작업 소비 설정 실패:', error); // LLM 규칙: 작은따옴표, 세미코론
-        throw error; // LLM 규칙: 에러 전파
+    } catch (error) {
+        console.error('작업 소비 설정 실패:', error);
+        throw error;
     }
 };
