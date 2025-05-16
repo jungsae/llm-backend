@@ -4,10 +4,6 @@ import { ValidationError, NotFoundError, BusinessError, DatabaseError } from '..
 
 export const jobService = {
     async createJob(userId, inputData, priority = 0) {
-        if (!userId) {
-            throw new ValidationError('userId는 필수입니다.');
-        }
-
         if (!inputData) {
             throw new ValidationError('inputData는 필수입니다.');
         }
@@ -15,7 +11,7 @@ export const jobService = {
         try {
             const job = await prisma.job.create({
                 data: {
-                    userId,
+                    userId: userId.toString(), // 임시로 문자열로 변환
                     inputData,
                     priority: priority || 0,
                     status: 'QUEUED'
@@ -105,7 +101,7 @@ export const jobService = {
         try {
             return await prisma.job.findFirst({
                 where: { status: 'QUEUED' },
-                orderBy: { priority: 'asc' }
+                orderBy: { priority: 'desc' }
             });
         } catch (error) {
             throw new DatabaseError('다음 작업 조회 중 오류가 발생했습니다', undefined, {

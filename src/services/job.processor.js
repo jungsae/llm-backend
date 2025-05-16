@@ -1,12 +1,11 @@
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../infrastructure/database/prisma.js';
 import { jobService } from './job.service.js';
 import { JobError } from '../errors/custom.errors.js';
 import { BusinessError } from '../errors/custom.errors.js';
 import { ERROR_CODES } from '../errors/error.codes.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
 const LLM_API_URL = 'https://blisle.duckdns.org/app1/v1/chat/completions';
 const TIMEOUT = 540000; // 9분
 
@@ -46,14 +45,16 @@ const processJobWithRetry = async (job, retryCount = 0) => {
         const processPromise = (async () => {
             // LLM API 요청 데이터 준비
             const llmPayload = {
+                model: 'llama-3-Korean-Bllossom-8B-Q4_K_M',
                 messages: [{ role: 'user', content: job.inputData.prompt }],
-                mode: 'instruct',
-                max_tokens: job.inputData.max_tokens || 150
+                max_tokens: job.inputData.max_tokens || 256,
+                temperature: job.inputData.temperature || 0.7
             };
 
             logger.info(`작업 ${job.id} LLM API 요청 시작:`, {
                 prompt: job.inputData.prompt,
-                apiUrl: LLM_API_URL
+                apiUrl: LLM_API_URL,
+                payload: llmPayload
             });
 
             // LLM API 호출
@@ -65,12 +66,26 @@ const processJobWithRetry = async (job, retryCount = 0) => {
             });
 
             // 응답 데이터 검증
-            if (!response.data) {
+            if (!response.data || !response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {
                 throw new BusinessError('LLM API 응답이 유효하지 않습니다', ERROR_CODES.JOB_PROCESSING_FAILED);
             }
 
-            await jobService.updateJobStatus(job.id, 'COMPLETED', response.data);
-            logger.info(`작업 ${job.id} 완료:`, { result: response.data });
+            const result = {
+                id: response.data.id,
+                model: response.data.model,
+                created: response.data.created,
+                content: response.data.choices[0].message.content,
+                finish_reason: response.data.choices[0].finish_reason,
+                usage: response.data.usage
+            };
+
+            await jobService.updateJobStatus(job.id, 'COMPLETED', result);
+            logger.info(`작업 ${job.id} 완료`, {
+                jobId: job.id,
+                content: result.content,
+                finish_reason: result.finish_reason,
+                usage: result.usage
+            });
         })();
 
         // 타임아웃 적용
