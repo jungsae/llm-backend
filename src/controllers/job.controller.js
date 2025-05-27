@@ -3,10 +3,10 @@ import { NotFoundError, ValidationError } from '../errors/custom.errors.js';
 import logger from '../utils/logger.js';
 
 export const createJob = async (request, reply) => {
-    const { messages, max_tokens, temperature } = request.body;
+    const { messages, max_tokens, temperature, priority } = request.body;
 
     // 임시 userId (인증 구현 전까지)
-    const tempUserId = 1;
+    const tempUserId = 'asd2d2234';
 
     // 입력 데이터 검증
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -16,8 +16,8 @@ export const createJob = async (request, reply) => {
     // LLM 요청을 위한 inputData 구성
     const inputData = {
         prompt: messages[0].content, // 첫 번째 메시지의 content를 prompt로 사용
-        max_tokens: max_tokens || 256,
-        temperature: temperature || 0.7
+        max_tokens: max_tokens,
+        temperature: temperature
     };
 
     logger.info('새 작업 생성 요청:', {
@@ -25,7 +25,7 @@ export const createJob = async (request, reply) => {
         inputData
     });
 
-    const job = await jobService.createJob(tempUserId, inputData);
+    const job = await jobService.createJob(tempUserId, inputData, priority);
     return reply.code(201).send(job);
 };
 

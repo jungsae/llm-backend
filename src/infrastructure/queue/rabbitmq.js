@@ -1,8 +1,9 @@
 import amqp from 'amqplib';
 import config from '../../config/index.js';
 import { processJob } from '../../services/job.processor.js';
-import { DatabaseError, QueueError } from '../../errors/custom.errors.js';
+import { QueueError } from '../../errors/custom.errors.js';
 import logger from '../../utils/logger.js';
+import { Job } from '../../models/job.model.js';
 
 let connection = null;
 let channel = null;
@@ -69,7 +70,7 @@ export const publishJob = async (job) => {
 
     try {
         const queueName = config.rabbitmq.queues.job.name;
-        const priorityLevel = job.priority || 0;
+        const priorityLevel = job.priority;
 
         logger.info('작업 발행 시도', {
             queueName,
@@ -112,6 +113,9 @@ export const consumeJobs = async (queueName = config.rabbitmq.queues.job.name) =
     try {
         logger.info('작업 소비 시작 대기', { queueName });
 
+        // 공식문서 권장 방식: prefetch를 consume 전에 명시적으로 호출
+        await channel.prefetch(1);
+
         await channel.consume(queueName, async (msg) => {
             if (!msg) return;
 
@@ -122,6 +126,21 @@ export const consumeJobs = async (queueName = config.rabbitmq.queues.job.name) =
 
             try {
                 const job = JSON.parse(msg.content.toString());
+                // DB에서 작업의 실제 상태 확인
+                const dbJob = await Job.findById(job.id);
+
+                // DB에 작업이 없거나 이미 완료된 경우
+                if (!dbJob || dbJob.status === 'COMPLETED' || dbJob.status === 'FAILED') {
+                    logger.info('작업 상태 확인 결과 처리 중단', {
+                        jobId: job.id,
+                        queueStatus: job.status,
+                        dbStatus: dbJob?.status || 'NOT_FOUND',
+                        deliveryTag: msg.fields.deliveryTag
+                    });
+                    channel.ack(msg);
+                    return;
+                }
+
                 logger.info('작업 내용 파싱 성공, 처리 시작', {
                     jobId: job.id,
                     status: job.status
@@ -135,9 +154,20 @@ export const consumeJobs = async (queueName = config.rabbitmq.queues.job.name) =
                     deliveryTag: msg.fields.deliveryTag
                 });
             } catch (error) {
+                let jobId = null;
+                try {
+                    const failedJob = JSON.parse(msg.content.toString());
+                    jobId = failedJob.id;
+                } catch (parseError) {
+                    logger.error('실패한 메시지 파싱 실패', {
+                        error: parseError.message,
+                        deliveryTag: msg.fields.deliveryTag
+                    });
+                }
+
                 logger.error('작업 처리 실패', {
                     error: error.message,
-                    jobId: job?.id,
+                    jobId: jobId,
                     deliveryTag: msg.fields.deliveryTag
                 });
 
@@ -145,12 +175,11 @@ export const consumeJobs = async (queueName = config.rabbitmq.queues.job.name) =
                 channel.nack(msg, false, true);
                 logger.error('실패 메시지 재큐', {
                     deliveryTag: msg.fields.deliveryTag,
-                    jobId: job?.id
+                    jobId: jobId
                 });
             }
         }, {
-            noAck: false,
-            prefetch: 1
+            noAck: false
         });
 
         logger.info('작업 소비 설정 완료', {

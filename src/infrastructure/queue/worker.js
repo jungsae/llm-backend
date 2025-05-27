@@ -1,6 +1,15 @@
+import 'dotenv/config';
 import { connectRabbitMQ, closeRabbitMQ, consumeJobs } from './rabbitmq.js';
 import { QueueError } from '../../errors/custom.errors.js';
+import config from '../../config/index.js';
 import logger from '../../utils/logger.js';
+
+// 환경 변수 로드 확인
+logger.info('환경 변수 로드 상태:', {
+    config: config,
+    llm: config.llm,
+    env: process.env.NODE_ENV
+});
 
 // 워커 프로세스 초기화
 const initializeWorker = async () => {

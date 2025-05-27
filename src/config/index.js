@@ -26,5 +26,11 @@ export default {
                 }
             }
         }
+    },
+    llm: {
+        apiUrl: process.env.LLM_API_URL,
+        model: process.env.LLM_MODEL,
+        maxTokens: parseInt(process.env.LLM_MAX_TOKENS),
+        temperature: parseFloat(process.env.LLM_TEMPERATURE)
     }
 }; 

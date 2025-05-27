@@ -1,18 +1,25 @@
 import axios from 'axios';
-import prisma from '../infrastructure/database/prisma.js';
 import { jobService } from './job.service.js';
 import { JobError } from '../errors/custom.errors.js';
 import { BusinessError } from '../errors/custom.errors.js';
 import { ERROR_CODES } from '../errors/error.codes.js';
 import logger from '../utils/logger.js';
+import config from '../config/index.js';
 
-const LLM_API_URL = 'https://blisle.duckdns.org/app1/v1/chat/completions';
+const LLM_API_URL = config.llm.apiUrl;
+const LLM_MODEL = config.llm.model;
+const LLM_MAX_TOKENS = config.llm.maxTokens;
+const LLM_TEMPERATURE = config.llm.temperature;
+
+logger.info('LLM 설정 로드 확인:', {
+    apiUrl: LLM_API_URL,
+    model: LLM_MODEL,
+    maxTokens: LLM_MAX_TOKENS,
+    temperature: LLM_TEMPERATURE
+});
+
 const TIMEOUT = 540000; // 9분
-
-// 작업 처리 타임아웃 설정 (5분)
-const JOB_TIMEOUT = 5 * 60 * 1000;
-
-// 작업 재시도 설정
+const JOB_TIMEOUT = 5 * 60 * 1000; // 5분
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1초
 
@@ -45,10 +52,21 @@ const processJobWithRetry = async (job, retryCount = 0) => {
         const processPromise = (async () => {
             // LLM API 요청 데이터 준비
             const llmPayload = {
-                model: 'llama-3-Korean-Bllossom-8B-Q4_K_M',
-                messages: [{ role: 'user', content: job.inputData.prompt }],
-                max_tokens: job.inputData.max_tokens || 256,
-                temperature: job.inputData.temperature || 0.7
+                model: LLM_MODEL,
+                user_id: job.userId,
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a helpful assistant.'
+                    },
+                    {
+                        role: 'user',
+                        content: job.inputData.prompt
+                    }
+                ],
+                max_tokens: LLM_MAX_TOKENS,
+                temperature: LLM_TEMPERATURE,
+                priority: job.priority
             };
 
             logger.info(`작업 ${job.id} LLM API 요청 시작:`, {

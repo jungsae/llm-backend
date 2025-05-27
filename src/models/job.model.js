@@ -1,4 +1,4 @@
-import prisma from '../infrastructure/database.js';
+import prisma from '../infrastructure/database/prisma.js';
 
 export class Job {
     static async create(data) {
